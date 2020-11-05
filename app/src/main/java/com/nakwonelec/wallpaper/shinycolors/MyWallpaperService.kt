@@ -1,35 +1,30 @@
 package com.nakwonelec.wallpaper.shinycolors
 
 import android.app.Presentation
-import android.app.WallpaperColors
 import android.content.*
 import android.content.res.Configuration
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Canvas
-import android.hardware.SensorManager
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Build
 import android.os.SystemClock
 import android.service.wallpaper.WallpaperService
+import android.transition.TransitionManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.util.TypedValue
-import android.view.*
+import android.view.GestureDetector
+import android.view.MotionEvent
+import android.view.Surface
+import android.view.SurfaceHolder
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
 import androidx.annotation.RequiresApi
 import androidx.constraintlayout.widget.ConstraintLayout
-import androidx.core.graphics.rotationMatrix
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
-import java.io.File
-import java.io.FileOutputStream
 import java.util.*
-import kotlin.math.roundToInt
 
 class MyWallpaperService: WallpaperService() {
     companion object {
@@ -64,6 +59,7 @@ class MyWallpaperService: WallpaperService() {
         var onVisivilityTimer: Timer? = null
         val myGestureDetector = GestureDetector(myContext, MySimpleOnGestureListener())
         var orientation = Configuration.ORIENTATION_PORTRAIT
+        var IsDelayVisible = false
 
         private fun log(message: String) {
             Log.d("MyWPS $myId", message)
@@ -208,6 +204,7 @@ class MyWallpaperService: WallpaperService() {
                 onVisivilityTimer = Timer().apply{
                     schedule(object:TimerTask(){
                         override fun run() {
+                            IsDelayVisible = true
                             if(isVisible) myWebView?.post {
                                 myWebView!!.onResume()
                             }
@@ -216,6 +213,7 @@ class MyWallpaperService: WallpaperService() {
                 }
             } else {
                 onVisivilityTimer = onVisivilityTimer?.run { cancel(); null }
+                IsDelayVisible = false
                 myWebView?.onPause()
             }
             /// previous code
@@ -228,11 +226,35 @@ class MyWallpaperService: WallpaperService() {
 //            }
         }
 
+        var lastmultitouch = 0L
         override fun onTouchEvent(event: MotionEvent) {
-            log("onTouchEvent")
             super.onTouchEvent(event)
-            log("x: " + event.x + " y: " + event.y + " rawx: " + event.rawX + " rawy: " + event.rawY)
-            myGestureDetector.onTouchEvent(event)
+            log("onTouchEvent(x: ${event.x} y: ${event.y} rawx: ${event.rawX} rawy: ${event.rawY} pointerCount: ${event.pointerCount} action: ${event.action}")
+            if(IsDelayVisible) {
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN -> log("onTouchEvent: ACTION_DOWN")
+                    MotionEvent.ACTION_UP -> log("onTouchEvent: ACTION_UP")
+                    MotionEvent.ACTION_BUTTON_PRESS -> log("onTouchEvent: ACTION_BUTTON_PRESS")
+                    MotionEvent.ACTION_BUTTON_RELEASE -> log("onTouchEvent: ACTION_BUTTON_RELEASE")
+                }
+                myGestureDetector.onTouchEvent(event)
+
+                if (event.pointerCount > 1 && event.action == MotionEvent.ACTION_POINTER_UP) {
+                    log("onTouchEvent: multitouch(${event.pointerCount}) event")
+                    if (event.eventTime - lastmultitouch < 1500) {
+                        log("onTouchEvent: reload")
+                        val intent = Intent(intent.Settings.toString())
+                        intent.putExtra(
+                            Settings.Control.toString(),
+                            Settings.Control.Back.toString()
+                        )
+                        myContext?.let {
+                            LocalBroadcastManager.getInstance(it).sendBroadcast(intent)
+                        }
+                    }
+                    lastmultitouch = event.eventTime
+                }
+            }
         }
 
 //        @RequiresApi(Build.VERSION_CODES.O_MR1)
@@ -367,7 +389,7 @@ class MyWallpaperService: WallpaperService() {
                 }
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/a5ffae3dda6990f5a88ed22886399b4c31afa7d45759b90ecdc979c90add7b9c")) {
                     return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("a5ffae3dda6990f5a88ed22886399b4c31afa7d45759b90ecdc979c90add7b9c.png"))
-                }
+                } ///
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/e92d50a2cfca8c57f9847e521f4ff5da788fbc15de593d0022c755ce63c01f0d")) {
                     return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("e92d50a2cfca8c57f9847e521f4ff5da788fbc15de593d0022c755ce63c01f0d.png"))
                 }
@@ -379,7 +401,7 @@ class MyWallpaperService: WallpaperService() {
                 }
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/f5d2aeb7ed213dd2a1b9440d70ecf584b8f2dc4ef0bb8715580962ea01de3255")) {
                     return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("f5d2aeb7ed213dd2a1b9440d70ecf584b8f2dc4ef0bb8715580962ea01de3255.png"))
-                }
+                } ///
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/e717d7f33398fa83426d14f60aac9229a9f5f7443122769f7dc5df744098e553")) {
                     return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("e717d7f33398fa83426d14f60aac9229a9f5f7443122769f7dc5df744098e553.png"))
                 }
@@ -394,6 +416,9 @@ class MyWallpaperService: WallpaperService() {
                 }
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/aef290419a47d1c1ad57ef92a484ad7b344cda12a7720368382d9b44fe551aff")) {
                     return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("aef290419a47d1c1ad57ef92a484ad7b344cda12a7720368382d9b44fe551aff.png"))
+                }
+                if(request?.url.toString().contains("shinycolors.enza.fun/assets/74c484bca9b827a900a262ab1f20cf37b6ce40fa2274ea459bb8258844766316")) {
+                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("74c484bca9b827a900a262ab1f20cf37b6ce40fa2274ea459bb8258844766316.png"))
                 }
                 /// 폰트
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/fonts/primula-HummingStd-E.woff2")) {
@@ -603,13 +628,6 @@ class MyWallpaperService: WallpaperService() {
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
                 log("onDoubleTap((${e.x}, ${e.y}, ${e.action})")
-
-                val intent = Intent(intent.Settings.toString())
-                intent.putExtra(Settings.Control.toString(), Settings.Control.Back.toString())
-                myContext?.let {
-                    LocalBroadcastManager.getInstance(it).sendBroadcast(intent)
-                }
-
                 return super.onDoubleTap(e)
             }
 
