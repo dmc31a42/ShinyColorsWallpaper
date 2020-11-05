@@ -16,10 +16,7 @@ import android.service.wallpaper.WallpaperService
 import android.util.DisplayMetrics
 import android.util.Log
 import android.util.TypedValue
-import android.view.GestureDetector
-import android.view.MotionEvent
-import android.view.OrientationEventListener
-import android.view.SurfaceHolder
+import android.view.*
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -62,7 +59,7 @@ class MyWallpaperService: WallpaperService() {
         var myPresentation: Presentation? = null
         var myVirtualDisplay: VirtualDisplay? = null
         var myMessageReceiver: MyBroadcastReceiver? = null
-        var orientationEventListener: MyOrientationEventListener? = null
+        val myDisplayListener: MyDisplayListener = MyDisplayListener()
         var IsOnSurfaceChangedExecuted = false
         var onVisivilityTimer: Timer? = null
         val myGestureDetector = GestureDetector(myContext, MySimpleOnGestureListener())
@@ -95,7 +92,6 @@ class MyWallpaperService: WallpaperService() {
                     LocalBroadcastManager.getInstance(myContext).unregisterReceiver(this)
                     null
                 }
-                orientationEventListener = orientationEventListener?.run { disable(); null }
                 myWebView?.run{destroy(); null}
                 myPresentation?.run{dismiss(); null}
                 myVirtualDisplay?.run { release(); null }
@@ -109,7 +105,9 @@ class MyWallpaperService: WallpaperService() {
                 LocalBroadcastManager.getInstance(myContext).unregisterReceiver(this)
                 null
             }
-            orientationEventListener = orientationEventListener?.run { disable(); null }
+            (getSystemService(Context.DISPLAY_SERVICE) as DisplayManager).let {
+                it.unregisterDisplayListener(myDisplayListener)
+            }
             myWebView = myWebView?.run{destroy(); null}
             myPresentation = myPresentation?.run{dismiss(); null}
             myVirtualDisplay = myVirtualDisplay?.run { release(); null }
@@ -129,6 +127,7 @@ class MyWallpaperService: WallpaperService() {
             val flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY
             val density = DisplayMetrics.DENSITY_DEFAULT
             if(myWebView != null && myVirtualDisplay != null && myPresentation != null) {
+                log("onSurfaceChanged: rotation")
                 myVirtualDisplay!!.resize(width,height,density)
                 when {
                     width>height -> {
@@ -179,22 +178,15 @@ class MyWallpaperService: WallpaperService() {
                         mediaPlaybackRequiresUserGesture = true
                         userAgentString = getString(R.string.desktop_ua)
                     }
-                    it.clearCache(true)
                     it.loadUrl(getString(R.string.shinyolors_home_url))
                 }
                 myMessageReceiver = MyBroadcastReceiver().also {
                     LocalBroadcastManager.getInstance(myContext).registerReceiver(it, IntentFilter(intent.Settings.toString()))
                 }
-                orientationEventListener = MyOrientationEventListener(myContext, SensorManager.SENSOR_DELAY_UI).also {
-                    if(it.canDetectOrientation()) {
-                        log("Can detect orientation")
-                        it.enable()
-                    } else {
-                        log("Cannot detect orientation")
-                    }
-                }
+                mDisplayManager.registerDisplayListener(myDisplayListener, null)
                 orientation = myContext.resources.configuration.orientation
                 myPresentation!!.show()
+
                 delayedNotifyColorsChanged(30000)
             }
         }
@@ -220,10 +212,10 @@ class MyWallpaperService: WallpaperService() {
                                 myWebView!!.onResume()
                             }
                         }
-                    }, 1000)
+                    }, 500)
                 }
             } else {
-                onVisivilityTimer = onVisivilityTimer?.run { stopSelf(); null }
+                onVisivilityTimer = onVisivilityTimer?.run { cancel(); null }
                 myWebView?.onPause()
             }
             /// previous code
@@ -427,8 +419,7 @@ class MyWallpaperService: WallpaperService() {
                         Settings.Control.Reload -> {
                             log("Command.Reload")
                             myWebView?.let {
-                                it.clearCache(true)
-                                it.loadUrl(getString(R.string.shinyolors_url))
+                                it.loadUrl(getString(R.string.shinyolors_home_url))
                                 it.reload()
                                 delayedNotifyColorsChanged(20000)
                             }
@@ -660,35 +651,52 @@ class MyWallpaperService: WallpaperService() {
             }
         }
 
-        inner class MyOrientationEventListener(context: Context, rate: Int): OrientationEventListener(context, rate) {
-            var previousConfiguration = myContext.resources.configuration.orientation
-            val context = context
-            val rate = rate
+        /// https://stackoverflow.com/questions/9909037/how-to-detect-screen-rotation-through-180-degrees-from-landscape-to-landscape-or
+        /// https://jamssoft.tistory.com/104
+        inner class MyDisplayListener(): DisplayManager.DisplayListener {
+            val display = getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
 
-            override fun onOrientationChanged(orientation: Int) {
-                log("onOrientationChange: " + orientation + " Configuration: " + context.resources.configuration.orientation)
-                if(previousConfiguration != context.resources.configuration.orientation) {
-                    previousConfiguration = context.resources.configuration.orientation
-                    this@MyEngine.orientation = context.resources.configuration.orientation
-                    Timer().schedule(object:TimerTask() {
-                        override fun run() {
-                            if (IsOnSurfaceChangedExecuted == false) {
-                                myWebView?.let {
-                                    it.post {
-                                        val angle = ((orientation / 90.0f).roundToInt() * 90)
-                                        log("angle: ${angle}")
-                                        when (angle) {
-                                            0, 360 -> it.rotation = 0.0f
-                                            90 -> it.rotation =270.0f
-                                            180 -> it.rotation =180.0f
-                                            270 -> it.rotation =90.0f
-                                        }
-                                        changeWebviewLayout(it, context.resources.configuration.orientation, myHolder!!, true)
-                                    }
-                                }
+            override fun onDisplayAdded(displayId: Int) {
+                log("Display #${displayId} added")
+            }
+
+            override fun onDisplayRemoved(displayId: Int) {
+                log("Display #${displayId} removed")
+            }
+
+            override fun onDisplayChanged(displayId: Int) {
+                log("Display #${displayId} changed")
+                if(!IsOnSurfaceChangedExecuted) {
+                    val angle = when {
+                        display.displays.isNotEmpty() -> {
+                            when (display.displays[0].rotation) {
+                                Surface.ROTATION_0 -> 0
+                                Surface.ROTATION_90 -> 270
+                                Surface.ROTATION_180 -> 180
+                                Surface.ROTATION_270 -> 90
+                                else -> 0
                             }
                         }
-                    }, 1000)
+                        else -> 0
+                    }
+                    val config_orientation = when(angle) {
+                        0, 180, 360 -> Configuration.ORIENTATION_PORTRAIT
+                        90, 270 -> Configuration.ORIENTATION_LANDSCAPE
+                        else -> Configuration.ORIENTATION_UNDEFINED
+                    }
+                    this@MyEngine.orientation = config_orientation
+                    log("onDisplayChanged(): orientation: ${config_orientation} run instead of onSurfaceChanged")
+                    myWebView?.let {
+                        it.post {
+                            when (angle) {
+                                0, 360 -> it.rotation = 0.0f
+                                90 -> it.rotation =270.0f
+                                180 -> it.rotation =180.0f
+                                270 -> it.rotation =90.0f
+                            }
+                            changeWebviewLayout(it, myContext.resources.configuration.orientation, myHolder!!, true)
+                        }
+                    }
                 }
             }
         }
