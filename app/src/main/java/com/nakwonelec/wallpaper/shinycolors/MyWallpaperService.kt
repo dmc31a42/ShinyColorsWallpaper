@@ -3,6 +3,9 @@ package com.nakwonelec.wallpaper.shinycolors
 import android.app.Presentation
 import android.content.*
 import android.content.res.Configuration
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.graphics.Color
 import android.hardware.display.DisplayManager
 import android.hardware.display.VirtualDisplay
 import android.os.Build
@@ -24,8 +27,14 @@ import androidx.annotation.RequiresApi
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.localbroadcastmanager.content.LocalBroadcastManager
 import androidx.preference.PreferenceManager
+import java.io.ByteArrayInputStream
+import java.io.ByteArrayOutputStream
+import java.lang.Exception
+import java.net.URL
 import java.util.*
+import java.net.HttpURLConnection
 
+/// https://stackoverflow.com/questions/57452827/android-how-to-use-a-virtualdisplay-to-host-a-webview-in-a-wallpaperservice
 class MyWallpaperService: WallpaperService() {
     companion object {
         // We can have multiple engines running at once (since you might have one on your home screen
@@ -59,6 +68,7 @@ class MyWallpaperService: WallpaperService() {
         var onVisivilityTimer: Timer? = null
         val myGestureDetector = GestureDetector(myContext, MySimpleOnGestureListener())
         var orientation = Configuration.ORIENTATION_PORTRAIT
+        var xOffset = 0.5f;
         var IsDelayVisible = false
 
         private fun log(message: String) {
@@ -324,6 +334,17 @@ class MyWallpaperService: WallpaperService() {
                 yPixelOffset
             )
             log("onOffsetsChanged(${xOffset}, ${yOffset}, ${xOffsetStep}, ${yOffsetStep}, ${xPixelOffset}, ${yPixelOffset}")
+            myWebView?.let {
+                it.post {
+                    log("onOffsetsChange: horizontalBias = ${xOffset}")
+                    val constraintLayout = myPresentation!!.findViewById<ConstraintLayout>(R.id.constraintlayout)
+                    TransitionManager.beginDelayedTransition(constraintLayout)
+                    it.layoutParams  = (it.layoutParams as ConstraintLayout.LayoutParams).apply {
+                        horizontalBias = xOffset
+                    }
+                    this.xOffset = xOffset
+                }
+            }
         }
 
         inner class MyWebViewClient(): WebViewClient() {
@@ -345,81 +366,50 @@ class MyWallpaperService: WallpaperService() {
                 view: WebView?,
                 request: WebResourceRequest?
             ): WebResourceResponse? {
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/7f697481939646e7371fd37596e0055b265b229c4f94dffac38bf51b87fce6a4")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("7f697481939646e7371fd37596e0055b265b229c4f94dffac38bf51b87fce6a4.png"))
+                val replaceImages = arrayOf<String>(
+                    "shinycolors.enza.fun/assets/7f697481939646e7371fd37596e0055b265b229c4f94dffac38bf51b87fce6a4",
+                    "newbiepr.github.io/Temporary_KRTL/data/image/my_page.parts.png",
+                    "shinycolors.enza.fun/assets/339f113f638b026327dc3b5f678083c1cacf49073f2fa85574f4ae9c7dde8fbb",
+                    "shinycolors.enza.fun/assets/34b62a9e7c7dbc6a65236863c97846b0cadc7a27ca8cd2ed0ff5f5177291f40c",
+                    "shinycolors.enza.fun/assets/8f5a4652a6d1d7a160fa53c7c06f245463066358eaf592a4be18e5a7a634f24a",
+                    "shinycolors.enza.fun/assets/838bc741063799df09eef6f032f97704eb6b8932ec45ea53de3690da5b54a721",
+                    "shinycolors.enza.fun/assets/6a93d1e1277ff64d8e387d0970ee6679575db722c66c069edc1fa017ef9362f1",
+                    "shinycolors.enza.fun/assets/2ea5cb08f06198ab5f08750221c72b8defb88ba661e61002d510322eabf44495",
+                    "shinycolors.enza.fun/assets/77b0bc65a8722449de6077d0103d9cbca7ad0813cd2679d7bb19a35e6f8f7ce3",
+                    "shinycolors.enza.fun/assets/2f7aa4ddb3a34dcc29e00535626fd82ca9d149655883bb5a5a3eac7bee2e6970",
+                    "shinycolors.enza.fun/assets/82b78308f00889cc2fdfae612fe1b5bdb0a6a14e1aa586833e137b525eae0e1f",
+                    /// 왼쪽 오른쪽 이벤트 버튼
+                    "shinycolors.enza.fun/assets/16da4627eb39a4cfc9564f8be263a12a810746dd5ca2e8de4bd19cdfa6d96969",
+                    "shinycolors.enza.fun/assets/a5ffae3dda6990f5a88ed22886399b4c31afa7d45759b90ecdc979c90add7b9c",
+                    "shinycolors.enza.fun/assets/e92d50a2cfca8c57f9847e521f4ff5da788fbc15de593d0022c755ce63c01f0d",
+                    "shinycolors.enza.fun/assets/b223090f115e90342407c2adbc74915a1fc0316a5dd2abc59afe220fb76b55cf",
+                    "shinycolors.enza.fun/assets/5908652bb24ee55b02b32180bf6d169ea31193f421f733f1ed4602da601a11c5",
+                    "shinycolors.enza.fun/assets/f5d2aeb7ed213dd2a1b9440d70ecf584b8f2dc4ef0bb8715580962ea01de3255",
+                    "shinycolors.enza.fun/assets/e717d7f33398fa83426d14f60aac9229a9f5f7443122769f7dc5df744098e553",
+                    "shinycolors.enza.fun/assets/4dbd41dbc80a312a8491dd9504370f892b74ce755cccef41d80dee92c1b23c2e",
+                    "shinycolors.enza.fun/assets/434c4ab4df5d1ed0c6dda9889d705612b7f689a4929833bbc0b64e91e0f562a7",
+                    "shinycolors.enza.fun/assets/bd5cda744ff82aee0bf54078283601f925fb927cecfd122696594de5009d8cc0",
+                    "shinycolors.enza.fun/assets/aef290419a47d1c1ad57ef92a484ad7b344cda12a7720368382d9b44fe551aff",
+                    "shinycolors.enza.fun/assets/74c484bca9b827a900a262ab1f20cf37b6ce40fa2274ea459bb8258844766316"
+                );
+                for (replaceImageUrl in replaceImages) {
+                    if(request?.url.toString().contains(replaceImageUrl)) {
+                        val url = URL(request!!.url.toString());
+                        with(url.openConnection() as HttpURLConnection) {
+                            val img = BitmapFactory.decodeStream(inputStream).copy(Bitmap.Config.ARGB_8888,true);
+                            for(i in 0 until img.width) {
+                                for(j in 0 until img.height) {
+                                    img.setPixel(i,j, Color.argb(0,0,0,0));
+                                }
+                            }
+                            val baos = ByteArrayOutputStream();
+                            img.compress(Bitmap.CompressFormat.PNG, 100, baos);
+                            val bais = ByteArrayInputStream(baos.toByteArray());
+                            return WebResourceResponse("image/png",null, bais);
+                        }
+                    }
                 }
-                if(request?.url.toString().contains("newbiepr.github.io/Temporary_KRTL/data/image/my_page.parts.png")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("7f697481939646e7371fd37596e0055b265b229c4f94dffac38bf51b87fce6a4.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/339f113f638b026327dc3b5f678083c1cacf49073f2fa85574f4ae9c7dde8fbb")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("339f113f638b026327dc3b5f678083c1cacf49073f2fa85574f4ae9c7dde8fbb.png"))
-                }
-                /// 홈 화면 말풍선
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/34b62a9e7c7dbc6a65236863c97846b0cadc7a27ca8cd2ed0ff5f5177291f40c")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("34b62a9e7c7dbc6a65236863c97846b0cadc7a27ca8cd2ed0ff5f5177291f40c.png"))
-                }
-                /// 왼쪽 가운데 메뉴버튼, 행사 더보기 버튼
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/8f5a4652a6d1d7a160fa53c7c06f245463066358eaf592a4be18e5a7a634f24a")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("8f5a4652a6d1d7a160fa53c7c06f245463066358eaf592a4be18e5a7a634f24a.png"))
-                }
-                /// 페스 버튼
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/838bc741063799df09eef6f032f97704eb6b8932ec45ea53de3690da5b54a721")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("838bc741063799df09eef6f032f97704eb6b8932ec45ea53de3690da5b54a721.png"))
-                }
-                /// 2.5기념버튼
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/6a93d1e1277ff64d8e387d0970ee6679575db722c66c069edc1fa017ef9362f1")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("6a93d1e1277ff64d8e387d0970ee6679575db722c66c069edc1fa017ef9362f1.png"))
-                }
-                /// 왼쪽 이벤트 배경들
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/2ea5cb08f06198ab5f08750221c72b8defb88ba661e61002d510322eabf44495")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("2ea5cb08f06198ab5f08750221c72b8defb88ba661e61002d510322eabf44495.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/77b0bc65a8722449de6077d0103d9cbca7ad0813cd2679d7bb19a35e6f8f7ce3")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("77b0bc65a8722449de6077d0103d9cbca7ad0813cd2679d7bb19a35e6f8f7ce3.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/2f7aa4ddb3a34dcc29e00535626fd82ca9d149655883bb5a5a3eac7bee2e6970")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("2f7aa4ddb3a34dcc29e00535626fd82ca9d149655883bb5a5a3eac7bee2e6970.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/82b78308f00889cc2fdfae612fe1b5bdb0a6a14e1aa586833e137b525eae0e1f")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("82b78308f00889cc2fdfae612fe1b5bdb0a6a14e1aa586833e137b525eae0e1f.png"))
-                }
-                /// 왼쪽 오른쪽 이벤트 버튼
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/16da4627eb39a4cfc9564f8be263a12a810746dd5ca2e8de4bd19cdfa6d96969")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("16da4627eb39a4cfc9564f8be263a12a810746dd5ca2e8de4bd19cdfa6d96969.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/a5ffae3dda6990f5a88ed22886399b4c31afa7d45759b90ecdc979c90add7b9c")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("a5ffae3dda6990f5a88ed22886399b4c31afa7d45759b90ecdc979c90add7b9c.png"))
-                } ///
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/e92d50a2cfca8c57f9847e521f4ff5da788fbc15de593d0022c755ce63c01f0d")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("e92d50a2cfca8c57f9847e521f4ff5da788fbc15de593d0022c755ce63c01f0d.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/b223090f115e90342407c2adbc74915a1fc0316a5dd2abc59afe220fb76b55cf")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("b223090f115e90342407c2adbc74915a1fc0316a5dd2abc59afe220fb76b55cf.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/5908652bb24ee55b02b32180bf6d169ea31193f421f733f1ed4602da601a11c5")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("5908652bb24ee55b02b32180bf6d169ea31193f421f733f1ed4602da601a11c5.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/f5d2aeb7ed213dd2a1b9440d70ecf584b8f2dc4ef0bb8715580962ea01de3255")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("f5d2aeb7ed213dd2a1b9440d70ecf584b8f2dc4ef0bb8715580962ea01de3255.png"))
-                } ///
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/e717d7f33398fa83426d14f60aac9229a9f5f7443122769f7dc5df744098e553")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("e717d7f33398fa83426d14f60aac9229a9f5f7443122769f7dc5df744098e553.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/4dbd41dbc80a312a8491dd9504370f892b74ce755cccef41d80dee92c1b23c2e")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("4dbd41dbc80a312a8491dd9504370f892b74ce755cccef41d80dee92c1b23c2e.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/434c4ab4df5d1ed0c6dda9889d705612b7f689a4929833bbc0b64e91e0f562a7")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("434c4ab4df5d1ed0c6dda9889d705612b7f689a4929833bbc0b64e91e0f562a7.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/bd5cda744ff82aee0bf54078283601f925fb927cecfd122696594de5009d8cc0")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("bd5cda744ff82aee0bf54078283601f925fb927cecfd122696594de5009d8cc0.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/aef290419a47d1c1ad57ef92a484ad7b344cda12a7720368382d9b44fe551aff")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("aef290419a47d1c1ad57ef92a484ad7b344cda12a7720368382d9b44fe551aff.png"))
-                }
-                if(request?.url.toString().contains("shinycolors.enza.fun/assets/74c484bca9b827a900a262ab1f20cf37b6ce40fa2274ea459bb8258844766316")) {
-                    return WebResourceResponse("image/png","",this@MyEngine.myContext.resources.assets.open("74c484bca9b827a900a262ab1f20cf37b6ce40fa2274ea459bb8258844766316.png"))
-                }
+
                 /// 폰트
                 if(request?.url.toString().contains("shinycolors.enza.fun/assets/fonts/primula-HummingStd-E.woff2")) {
                     return WebResourceResponse("font/woff2",null,this@MyEngine.myContext.resources.assets.open("primula-HummingStd-E.woff2"))
@@ -598,8 +588,8 @@ class MyWallpaperService: WallpaperService() {
                     if(orientation == Configuration.ORIENTATION_PORTRAIT) {
                         e.setLocation(
                             e.x
-                                    + myWebView!!.width/2
-                                    - myHolder!!.surfaceFrame.right/2,
+                                + (myWebView!!.width
+                                - myHolder!!.surfaceFrame.right)*this@MyEngine.xOffset,
                             e.y)
 
                     } else {
@@ -738,7 +728,7 @@ class MyWallpaperService: WallpaperService() {
                             height = holder.surfaceFrame.height()*16/9
                         } else {
                             width = holder.surfaceFrame.width()
-                            height = holder.surfaceFrame.width()*16/9
+                            height = holder.surfaceFrame.width()*16/9+10
                         }
                         dimensionRatio = null
                     }
